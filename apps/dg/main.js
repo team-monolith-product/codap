@@ -332,9 +332,11 @@ DG.main = function main() {
     if (isEditMode) {
       menu.splice(0, 0, { name: "DG.fileMenu.menuItem.openDocument".loc(), action: "openFileDialog" });
     }
+    var disableAutoSave = DG.getQueryParam("autosave") === "false";  
 
     var options = {
-          autoSaveInterval: 5,
+          // 자동저장은 기본으로 5초이고, 비활성화된 경우에는 undefined로 설정합니다.
+          autoSaveInterval: disableAutoSave ? undefined : 5,
           appName: DG.APPNAME,
           appVersion: DG.VERSION,
           appBuildNum: DG.BUILD_NUM,
@@ -721,11 +723,6 @@ DG.main = function main() {
         switch (event.type) {
           case 'connected':
             DG.cfmClient = event.data.client;
-            DG.cfmClient.setProviderOptions("documentStore",
-                                            {appName: DG.APPNAME,
-                                             appVersion: DG.VERSION,
-                                             appBuildNum: DG.BUILD_NUM
-                                            });
             DG.cfmClient._ui.setMenuBarInfo("Version "+DG.VERSION+" ("+DG.BUILD_NUM+")");
 
             // synchronize document dirty state on document change
