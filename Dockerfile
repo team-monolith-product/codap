@@ -117,10 +117,11 @@ USER root
 RUN set -eux; \
     for p in /tmp /certs /opt/bitnami/nginx; do \
       if [ -e "$p" ]; then \
-        chown -R root:root "$p"; \
-        chmod -R go-rwx "$p"; \
+        chown -R 1001:root "$p"; \
       fi; \
     done
+
+USER 1001
 
 EXPOSE 80
 
@@ -138,10 +139,11 @@ USER root
 RUN set -eux; \
     for p in /tmp /certs /opt/bitnami/nginx; do \
       if [ -e "$p" ]; then \
-        chown -R root:root "$p"; \
-        chmod -R go-rwx "$p"; \
+        chown -R 1001:root "$p"; \
       fi; \
     done
+
+USER 1001
 
 # Nginx 포트 노출
 EXPOSE 80
