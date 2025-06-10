@@ -112,10 +112,10 @@ FROM bitnami/nginx:1.26.0-debian-12-r1 as dev
 COPY --from=builder-dev /codap/dist /app/codap
 
 # CSAP U07 소유자가 존재하지 않는 파일 점검
-# ── 하드닝: /tmp /certs /opt/bitnami/nginx ──
+# ── 하드닝: /tmp /certs ──
 USER root
 RUN set -eux; \
-    for p in /tmp /certs /opt/bitnami/nginx; do \
+    for p in /tmp /certs; do \
       if [ -e "$p" ]; then \
         chown -R 1001:root "$p"; \
       fi; \
@@ -134,10 +134,10 @@ FROM bitnami/nginx:1.26.0-debian-12-r1 as prd
 COPY --from=builder-prd /codap/dist /app/codap
 
 # CSAP U07 소유자가 존재하지 않는 파일 점검
-# ── 하드닝: /tmp /certs /opt/bitnami/nginx ──
+# ── 하드닝: /tmp /certs ──
 USER root
 RUN set -eux; \
-    for p in /tmp /certs /opt/bitnami/nginx; do \
+    for p in /tmp /certs; do \
       if [ -e "$p" ]; then \
         chown -R 1001:root "$p"; \
       fi; \
