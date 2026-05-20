@@ -996,18 +996,34 @@ DG.appController = SC.Object.create((function() // closure
         };
 
         var that = this;
-        DG.busyCursor.show(function() {
-          var reader = new FileReader();
-          if(iFile) {
-            reader.onabort = handleAbnormal;
-            reader.onerror = handleAbnormal;
-            reader.onload = handleRead;
-            if(iType === 'IMAGE') {
-              reader.readAsDataURL(iFile);
-            } else {
-              reader.readAsText(iFile);
+        DG.busyCursor.show(async function() {
+          if(!iFile) return;
+          // AIDEV-NOTE:
+          // IMAGE 타입은 FileReader.readAsDataURL로 base64 data URL을 만드는 대신, 외부 서버에
+          // 업로드하여 URL을 받는다. data URL 임베드는 문서 직렬화 산출물을 비대화시켜 save timeout 초과를 유발한다.  
+          if(iType === 'IMAGE') {
+            try {
+              var url = await DG.cfmClient.uploadBinary(iFile);
+              // iType이 'IMAGE'일 때의 handleRead를 재현한다.
+              SC.run(function() {
+                try {
+                  that.importImage(url, iFile.name);
+                  if(iDialog) iDialog.close();
+                } catch (er) {
+                  console.log(er);
+                  if(iDialog) iDialog.showAlert(er);
+                }
+              });
+            } catch (err) {
+              handleAbnormal(err);
             }
+            return;
           }
+          var reader = new FileReader();
+          reader.onabort = handleAbnormal;
+          reader.onerror = handleAbnormal;
+          reader.onload = handleRead;
+          reader.readAsText(iFile);
         });
       }.bind(this);
 
