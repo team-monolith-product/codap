@@ -347,11 +347,12 @@ DG.GraphController = DG.DataDisplayController.extend(
 
         addBackgroundImage: function () {
 
-          function handleAbnormal(err) {
-            console.log("Abort or error on background image upload.", err);
+          function handleAbnormal() {
+            console.log("Abort or error on file read.");
           }
 
-          function applyBackgroundImage(tImage) {
+          function handleRead() {
+            var tImage = this.result;
             DG.UndoHistory.execute(DG.Command.create({
               name: 'graph.addBackgroundImage',
               undoString: 'DG.Undo.graph.addBackgroundImage',
@@ -379,19 +380,13 @@ DG.GraphController = DG.DataDisplayController.extend(
 
           }
 
-          // AIDEV-NOTE:
-          // 원본은 FileReader.readAsDataURL로 base64 data URL을 만들어 plotBackgroundImage에 저장했다.
-          // 이 경우 문서 직렬화 결과가 비대해져 저장 timeout 초과가 발생하므로,
-          // 외부 파일 서버(ActiveStorage DirectUpload)로 업로드하고 반환된 URL만 저장한다.
-          // 렌더링(Raphael)·저장/복원 경로 모두 src 문자열을 무가공 처리하므로 호환된다.
-          // 기존 base64 임베드 문서도 그대로 load 가능하다.
-          async function parseData(iData) {
-            if (!iData) return;
-            try {
-              var tImage = await DG.cfmClient.uploadBinary(iData.file.object);
-              applyBackgroundImage(tImage);
-            } catch (err) {
-              handleAbnormal(err);
+          function parseData(iData) {
+            if (iData) {
+              var tReader = new FileReader();
+              tReader.onabort = handleAbnormal;
+              tReader.onerror = handleAbnormal;
+              tReader.onload = handleRead;
+              tReader.readAsDataURL(iData.file.object);
             }
           }
 
