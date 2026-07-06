@@ -17,15 +17,8 @@ jobs:
           "aws": {
             "imageName": "jce-ecr-codap-all-prd",
             "valueFilePath": ["codap-nginx/aws-apne2-prd-service.yaml"]
-          },
-          "ncp": {
-            "registry": "ped-cr-all-prd.ncr.gov-ntruss.com",
-            "imageName": "jce-codap",
-            "valueFilePath": ["codap-nginx/ncloud-prd.yaml"]
           }
         }
 
     secrets:
-      NCP_ACCESS_KEY_ID: ${{ secrets.NCP_ACCESS_KEY_ID }}
-      NCP_SECRET_KEY: ${{ secrets.NCP_SECRET_KEY }}
       MACHINE_TOKEN: ${{ secrets.MACHINE_TOKEN }}
