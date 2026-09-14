@@ -4,19 +4,47 @@
 import argparse
 import gzip
 import hashlib
+from html.parser import HTMLParser
 import http.client
 import json
 from pathlib import Path
+import re
 import socket
 import subprocess
 import tempfile
 import time
 import unittest
+from urllib.parse import urljoin, urlsplit
 import uuid
 
 
 def command(*args):
     return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
+
+
+class EntryAssets(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.references = set()
+        self.in_script = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "script":
+            self.in_script = True
+            if attrs.get("src"):
+                self.references.add((attrs["src"], "script"))
+        if tag == "link" and attrs.get("rel") == "stylesheet" and attrs.get("href"):
+            self.references.add((attrs["href"], "style"))
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self.in_script = False
+
+    def handle_data(self, data):
+        if self.in_script:
+            for path in re.findall(r'''["']([^"'\s]+\.css)["']''', data):
+                self.references.add((path, "style"))
 
 
 class RuntimeTest(unittest.TestCase):
@@ -124,16 +152,27 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(redirect[1]["location"], "/dg/?language=ko")
         if self.options.built_assets:
             for language in ("en", "ko"):
-                for filename, mime in [("index.html", "text/html"),
-                                       ("javascript-packed.js", "application/javascript"),
-                                       ("stylesheet-packed.css", "text/css")]:
-                    path = f"/static/dg/{language}/cert/{filename}"
-                    with self.subTest(path=path):
-                        resource = self.request(path)
+                entry_path = f"/static/dg/{language}/cert/index.html"
+                entry = self.request(entry_path)
+                self.assertEqual(entry[0], 200)
+                self.assertEqual(entry[1]["content-type"], "text/html")
+                self.assertEqual(self.request("/dg" + entry_path)[2], entry[2])
+                assets = EntryAssets()
+                assets.feed(entry[2].decode())
+                self.assertEqual({kind for _, kind in assets.references}, {"script", "style"})
+                for reference, kind in sorted(assets.references):
+                    path = urlsplit(urljoin(entry_path, reference))
+                    if path.scheme or path.netloc:
+                        continue
+                    with self.subTest(path=path.path):
+                        resource = self.request(path.path)
                         self.assertEqual(resource[0], 200)
                         self.assertTrue(resource[2])
-                        self.assertEqual(resource[1]["content-type"], mime)
-                        self.assertEqual(self.request("/dg" + path)[2], resource[2])
+                        if kind == "style":
+                            self.assertEqual(resource[1]["content-type"], "text/css")
+                        elif path.path.endswith(".js"):
+                            self.assertEqual(resource[1]["content-type"], "application/javascript")
+                        self.assertEqual(self.request("/dg" + path.path)[2], resource[2])
 
     def test_missing_files_and_head(self):
         for path in ["/", "/missing-sim10", "/dg/missing-sim10"]:
