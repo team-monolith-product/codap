@@ -1,0 +1,52 @@
+name: NGINX Runtime
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker/**
+      - tests/**
+      - .github/workflows/nginx-runtime.yml
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Require access to service-helm
+        env:
+          MACHINE_TOKEN: ${{ secrets.MACHINE_TOKEN }}
+        run: |
+          if [ -z "$MACHINE_TOKEN" ]; then
+            echo '::error::MACHINE_TOKEN is required to read the private service-helm chart. Fork pull requests without this secret cannot run this check.'
+            exit 1
+          fi
+
+      - name: Check out service-helm
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: team-monolith-product/jce-service-helm
+          ref: main
+          path: sibling/service-helm
+          token: ${{ secrets.MACHINE_TOKEN }}
+          persist-credentials: false
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+        with:
+          version: v4.1.4
+
+      - name: Build runtime
+        run: docker build --platform linux/amd64 --target runtime --tag codap-sim10-runtime .
+
+      - name: Test runtime with the Helm server block
+        run: >-
+          python3 tests/nginx-runtime.py
+          --image codap-sim10-runtime
+          --helm-chart sibling/service-helm/codap-nginx

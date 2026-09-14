@@ -6,6 +6,9 @@
 # nginx 이미지가 debian을 사용하고 있기에 통일합니다.
 FROM bitnamilegacy/ruby:2.7-debian-11 as builder
 
+# bullseye security 패키지 보존을 위해 고정 snapshot의 Release 만료 검사만 제외함
+RUN sed -i 's|deb http://security.debian.org/debian-security|deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260831T000000Z/|' /etc/apt/sources.list
+
 # 필요한 패키지 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -102,24 +105,21 @@ RUN mv /codap/dist/$BUILD_NUMBER/* /codap/dist/
 
 
 
-### Step 2 ###
-# Nginx 이미지로 전환하여 정적 파일 서빙
+FROM nginxinc/nginx-unprivileged:1.30.4-trixie@sha256:a5866218f05961c7651a4a4a18d9bd0e5e5b4b26aafffb334df3423948db3560 AS runtime
 
-# bitnami/nginx 20.1.3 버전에서 사용하는 image tag
-FROM bitnamilegacy/nginx:1.28.0-debian-12-r3 as dev
+USER root
+RUN groupadd --gid 1001 codap \
+    && useradd --uid 1001 --gid 1001 --no-create-home --home-dir /app/codap --shell /usr/sbin/nologin codap \
+    && mkdir -p /app/codap /opt/bitnami/nginx/conf/server_blocks \
+    && rm /etc/nginx/conf.d/default.conf
 
-# 빌드된 정적 파일 복사
+COPY docker/codap.conf /etc/nginx/conf.d/codap.conf
+
+USER 1001:1001
+EXPOSE 8080
+
+FROM runtime AS dev
 COPY --from=builder-dev /codap/dist /app/codap
 
-EXPOSE 80
-
-
-
-# bitnami/nginx 20.1.3 버전에서 사용하는 image tag
-FROM bitnamilegacy/nginx:1.28.0-debian-12-r3 as prd
-
-# 빌드된 정적 파일 복사
+FROM runtime AS prd
 COPY --from=builder-prd /codap/dist /app/codap
-
-# Nginx 포트 노출
-EXPOSE 80
