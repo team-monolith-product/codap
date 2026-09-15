@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -32,7 +33,7 @@ def manifest(args):
                     with archive.extractfile(member) as source:
                         for chunk in iter(lambda: source.read(1024 * 1024), b""):
                             digest.update(chunk)
-                    entry.update(type="file", size=member.size, sha256=digest.hexdigest())
+                    entry.update(type="file", size=member.size, sha256=digest.hexdigest(), mtime=member.mtime)
                 elif member.isdir():
                     entry.update(type="directory")
                 elif member.issym():
@@ -82,8 +83,8 @@ def check_image(image, platform, built_assets=False):
         command("docker", "run", "--rm", "--platform", platform, "--network", "none",
                 "--read-only", "--user", "0:0", *mount, image, "sh", "-ec",
                 "chown 0:101 /work; chmod 2770 /work")
-        command(*run, *mount, image, "sh", "-ec", "cp -R /app/codap/. /work/")
-        copied = manifest([*run, *mount, image, "tar", "-C", "/work", "-cf", "-", "."])
+        command(*run, *mount, image, "sh", "-ec", "cp -Rp /app/codap /work/")
+        copied = manifest([*run, *mount, image, "tar", "-C", "/work/codap", "-cf", "-", "."])
         assert source == copied, json.dumps({
             path: {"source": source.get(path), "copied": copied.get(path)}
             for path in source.keys() | copied.keys() if source.get(path) != copied.get(path)
@@ -93,7 +94,7 @@ def check_image(image, platform, built_assets=False):
     print(json.dumps({"image": image, "id": info["Id"], "platform": platform,
                       "entries": len(source), "files": sum(e["type"] == "file" for e in source.values()),
                       "bytes": sum(e.get("size", 0) for e in source.values()),
-                      "result": "UID/GID, readonly, no NGINX, hashes, modes and symlinks passed"}), flush=True)
+                      "result": "UID/GID, readonly, no NGINX, hashes, mtimes, modes and symlinks passed"}), flush=True)
     return source
 
 
@@ -120,6 +121,9 @@ def check_fixture(platform):
             (assets / "directory-link").symlink_to(".nested", target_is_directory=True)
             (assets / "missing-link").symlink_to("missing")
             (assets / "absolute-link").symlink_to("/etc/passwd")
+            for path in assets.rglob("*"):
+                if path.is_file() and not path.is_symlink():
+                    os.utime(path, (946684800, 946684800))
             (context / "Dockerfile").write_text(
                 f"FROM {base}\nCOPY --chown=101:101 fixture/ /app/codap/\n")
             subprocess.run(["docker", "build", "--platform", platform, "--tag", name, temp], check=True)
