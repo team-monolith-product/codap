@@ -3,7 +3,6 @@
 
 # ruby 2.7 / node 16 이 설치되어야 합니다.
 # node 의 설치가 더 편하므로, ruby image를 가져와서 node를 설치합니다.
-# nginx 이미지가 debian을 사용하고 있기에 통일합니다.
 FROM bitnamilegacy/ruby:2.7-debian-11 as builder
 
 # bullseye security 패키지 보존을 위해 고정 snapshot의 Release 만료 검사만 제외함
@@ -105,21 +104,17 @@ RUN mv /codap/dist/$BUILD_NUMBER/* /codap/dist/
 
 
 
-FROM nginxinc/nginx-unprivileged:1.30.4-trixie@sha256:a5866218f05961c7651a4a4a18d9bd0e5e5b4b26aafffb334df3423948db3560 AS runtime
+FROM busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23 AS assets
 
-USER root
-RUN groupadd --gid 1001 codap \
-    && useradd --uid 1001 --gid 1001 --no-create-home --home-dir /app/codap --shell /usr/sbin/nologin codap \
-    && mkdir -p /app/codap /opt/bitnami/nginx/conf/server_blocks \
-    && rm /etc/nginx/conf.d/default.conf
+RUN addgroup -g 101 codap \
+    && adduser -D -H -u 101 -G codap -h /app/codap -s /bin/false codap \
+    && mkdir -p /app/codap \
+    && chown 101:101 /app/codap
 
-COPY docker/codap.conf /etc/nginx/conf.d/codap.conf
+USER 101:101
 
-USER 1001:1001
-EXPOSE 8080
+FROM assets AS dev
+COPY --chown=101:101 --from=builder-dev /codap/dist /app/codap
 
-FROM runtime AS dev
-COPY --from=builder-dev /codap/dist /app/codap
-
-FROM runtime AS prd
-COPY --from=builder-prd /codap/dist /app/codap
+FROM assets AS prd
+COPY --chown=101:101 --from=builder-prd /codap/dist /app/codap
