@@ -3,8 +3,10 @@
 
 # ruby 2.7 / node 16 이 설치되어야 합니다.
 # node 의 설치가 더 편하므로, ruby image를 가져와서 node를 설치합니다.
-# nginx 이미지가 debian을 사용하고 있기에 통일합니다.
 FROM bitnamilegacy/ruby:2.7-debian-11 as builder
+
+# bullseye security 패키지 보존을 위해 고정 snapshot의 Release 만료 검사만 제외함
+RUN sed -i 's|deb http://security.debian.org/debian-security|deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260831T000000Z/|' /etc/apt/sources.list
 
 # 필요한 패키지 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -102,48 +104,17 @@ RUN mv /codap/dist/$BUILD_NUMBER/* /codap/dist/
 
 
 
-### Step 2 ###
-# Nginx 이미지로 전환하여 정적 파일 서빙
+FROM busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23 AS assets
 
-# bitnami/nginx 20.1.3 버전에서 사용하는 image tag
-FROM bitnamilegacy/nginx:1.28.0-debian-12-r3 as dev
+RUN addgroup -g 101 codap \
+    && adduser -D -H -u 101 -G codap -h /app/codap -s /bin/false codap \
+    && mkdir -p /app/codap \
+    && chown 101:101 /app/codap
 
-# 빌드된 정적 파일 복사
-COPY --from=builder-dev /codap/dist /app/codap
+USER 101:101
 
-# CSAP U07 소유자가 존재하지 않는 파일 점검
-# ── 하드닝: /tmp /certs ──
-USER root
-RUN set -eux; \
-    for p in /tmp /certs; do \
-      if [ -e "$p" ]; then \
-        chown -R 1001:root "$p"; \
-      fi; \
-    done
+FROM assets AS dev
+COPY --chown=101:101 --from=builder-dev /codap/dist /app/codap
 
-USER 1001
-
-EXPOSE 80
-
-
-
-# bitnami/nginx 20.1.3 버전에서 사용하는 image tag
-FROM bitnamilegacy/nginx:1.28.0-debian-12-r3 as prd
-
-# 빌드된 정적 파일 복사
-COPY --from=builder-prd /codap/dist /app/codap
-
-# CSAP U07 소유자가 존재하지 않는 파일 점검
-# ── 하드닝: /tmp /certs ──
-USER root
-RUN set -eux; \
-    for p in /tmp /certs; do \
-      if [ -e "$p" ]; then \
-        chown -R 1001:root "$p"; \
-      fi; \
-    done
-
-USER 1001
-
-# Nginx 포트 노출
-EXPOSE 80
+FROM assets AS prd
+COPY --chown=101:101 --from=builder-prd /codap/dist /app/codap
